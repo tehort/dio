@@ -848,7 +848,7 @@ abstract class DioMixin implements Dio {
                   if (!request) data.request = data.request ?? requestOptions;
                   return interceptor(data).then((e) => e ?? data);
                 } else {
-                  throw assureDioError(data, requestOptions);
+                  return Future.error(assureDioError(_e ?? err, requestOptions));
                 }
               });
             }),
@@ -867,7 +867,7 @@ abstract class DioMixin implements Dio {
           if (err is! Response) {
             return errInterceptor(assureDioError(err, requestOptions)).then((e){
               if (e is! Response) {
-                throw assureDioError(e ?? err, requestOptions);
+                return Future.error(assureDioError(e, options));
               }
               return e;
             });

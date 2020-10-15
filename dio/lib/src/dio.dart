@@ -837,8 +837,7 @@ abstract class DioMixin implements Dio {
     Function _interceptorWrapper(interceptor, bool request) {
       return (data) async {
         var type = request ? (data is RequestOptions) : (data is Response);
-        var lock =
-            request ? interceptors.requestLock : interceptors.responseLock;
+        var lock = request ? interceptors.requestLock : interceptors.responseLock;
         if (_isErrorOrException(data) || type) {
           return listenCancelForAsyncTask(
             cancelToken,
@@ -848,7 +847,7 @@ abstract class DioMixin implements Dio {
                   if (!request) data.request = data.request ?? requestOptions;
                   return interceptor(data).then((e) => e ?? data);
                 } else {
-                  return Future.error(assureDioError(e ?? err, requestOptions));
+                  throw assureDioError(data, requestOptions);
                 }
               });
             }),
@@ -863,11 +862,11 @@ abstract class DioMixin implements Dio {
     // we can handle the return value of interceptor callback.
     Function _errorInterceptorWrapper(errInterceptor) {
       return (err) {
-        return checkIfNeedEnqueue(interceptors.errorLock, (){
+        return checkIfNeedEnqueue(interceptors.errorLock, () {
           if (err is! Response) {
-            return errInterceptor(assureDioError(err, requestOptions)).then((e){
+            return errInterceptor(assureDioError(err, requestOptions)).then((e) {
               if (e is! Response) {
-                return Future.error(assureDioError(e, options));
+                throw assureDioError(e ?? err, requestOptions);
               }
               return e;
             });
@@ -963,7 +962,7 @@ abstract class DioMixin implements Dio {
         );
       }
     } catch (e) {
-      throw assureDioError(e, options);
+      return Future.error(assureDioError(e, options));
     }
   }
 
@@ -974,11 +973,9 @@ abstract class DioMixin implements Dio {
     }
   }
 
-  Future<T> listenCancelForAsyncTask<T>(
-      CancelToken cancelToken, Future<T> future) {
+  Future<T> listenCancelForAsyncTask<T>(CancelToken cancelToken, Future<T> future) {
     return Future.any([
-      if (cancelToken != null)
-        cancelToken.whenCancel.then((e) => throw cancelToken.cancelError),
+      if (cancelToken != null) cancelToken.whenCancel.then((e) => throw cancelToken.cancelError),
       future,
     ]);
   }
@@ -987,8 +984,7 @@ abstract class DioMixin implements Dio {
     var data = options.data;
     List<int> bytes;
     Stream<List<int>> stream;
-    if (data != null &&
-        ['POST', 'PUT', 'PATCH', 'DELETE'].contains(options.method)) {
+    if (data != null && ['POST', 'PUT', 'PATCH', 'DELETE'].contains(options.method)) {
       // Handle the FormData
       int length;
       if (data is Stream) {
@@ -1035,8 +1031,7 @@ abstract class DioMixin implements Dio {
         options.headers[Headers.contentLengthHeader] = length.toString();
       }
       var complete = 0;
-      var byteStream =
-          stream.transform<Uint8List>(StreamTransformer.fromHandlers(
+      var byteStream = stream.transform<Uint8List>(StreamTransformer.fromHandlers(
         handleData: (data, sink) {
           if (options.cancelToken != null && options.cancelToken.isCancelled) {
             sink
@@ -1054,8 +1049,7 @@ abstract class DioMixin implements Dio {
         },
       ));
       if (options.sendTimeout > 0) {
-        byteStream.timeout(Duration(milliseconds: options.sendTimeout),
-            onTimeout: (sink) {
+        byteStream.timeout(Duration(milliseconds: options.sendTimeout), onTimeout: (sink) {
           sink.addError(DioError(
             request: options,
             error: 'Sending timeout[${options.connectTimeout}ms]',
@@ -1071,13 +1065,11 @@ abstract class DioMixin implements Dio {
     return null;
   }
 
-  RequestOptions mergeOptions(
-      Options opt, String url, data, Map<String, dynamic> queryParameters) {
+  RequestOptions mergeOptions(Options opt, String url, data, Map<String, dynamic> queryParameters) {
     var query = (Map<String, dynamic>.from(options.queryParameters ?? {}))
       ..addAll(queryParameters ?? {});
     final optBaseUrl = (opt is RequestOptions) ? opt.baseUrl : null;
-    final optConnectTimeout =
-        (opt is RequestOptions) ? opt.connectTimeout : null;
+    final optConnectTimeout = (opt is RequestOptions) ? opt.connectTimeout : null;
     return RequestOptions(
       method: (opt.method ?? options.method)?.toUpperCase() ?? 'GET',
       headers: (Map.from(options.headers))..addAll(opt.headers),
@@ -1087,19 +1079,16 @@ abstract class DioMixin implements Dio {
       connectTimeout: optConnectTimeout ?? options.connectTimeout ?? 0,
       sendTimeout: opt.sendTimeout ?? options.sendTimeout ?? 0,
       receiveTimeout: opt.receiveTimeout ?? options.receiveTimeout ?? 0,
-      responseType:
-          opt.responseType ?? options.responseType ?? ResponseType.json,
+      responseType: opt.responseType ?? options.responseType ?? ResponseType.json,
       extra: (Map.from(options.extra))..addAll(opt.extra),
-      contentType:
-          opt.contentType ?? options.contentType ?? Headers.jsonContentType,
+      contentType: opt.contentType ?? options.contentType ?? Headers.jsonContentType,
       validateStatus: opt.validateStatus ??
           options.validateStatus ??
           (int status) {
             return status >= 200 && status < 300;
           },
-      receiveDataWhenStatusError: opt.receiveDataWhenStatusError ??
-          options.receiveDataWhenStatusError ??
-          true,
+      receiveDataWhenStatusError:
+          opt.receiveDataWhenStatusError ?? options.receiveDataWhenStatusError ?? true,
       followRedirects: opt.followRedirects ?? options.followRedirects ?? true,
       maxRedirects: opt.maxRedirects ?? options.maxRedirects ?? 5,
       queryParameters: query,
